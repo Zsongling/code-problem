@@ -1,0 +1,2 @@
+#如何解决预训练模型和模型参数不匹配问题，对下面函数进行操作，使对应的相等，不对应的舍弃。
+net.load_state_dict(pretrained_dict, strict=False)
