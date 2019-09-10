@@ -1,0 +1,59 @@
+#!/usr/bin/python
+# coding:utf-8
+import argparse
+import glob
+import cv2
+import numpy as np
+from demo_rpn_utils.net import *
+from demo_rpn_utils.run_SiamRPN import SiamRPN_init, SiamRPN_track
+from demo_rpn_utils.utils import get_axis_aligned_bbox, cxy_wh_2_rect, load_net
+def draw_rectangle(event,x,y,flags,param):
+    global ix, iy,W,H#global关键字实现的功能为函数内部作用域想要对外部作用域的变量进行修改
+    if event==cv2.EVENT_LBUTTONDOWN:
+        ix, iy = x, y
+        # print("point1:=", x, y)
+    elif event==cv2.EVENT_LBUTTONUP:
+        # print("point2:=", x, y)
+        W=x-ix
+        H= y-iy
+        cv2.rectangle(im, (ix, iy), (x, y), (0, 255, 0), 2)
+
+parser = argparse.ArgumentParser(description='PyTorch SiameseX demo')
+parser.add_argument('--model', metavar='model', default='SiamRPNPPRes50', type=str,
+                    help='which model to use.')
+args = parser.parse_args()
+# load net
+net = eval(args.model)()
+load_net('/home/ubuntu/zsl/SiamRPNPPRes50.pth'.format(args.model), net)
+net.eval().cuda()
+cap = cv2.VideoCapture(0)  # 创建一个 VideoC
+
+# apture 对象
+if cap.isOpened():
+    success, im = cap.read()
+    ix, iy, W, H = 0, 0, 0, 0
+    cv2.namedWindow('image')
+    cv2.setMouseCallback('image', draw_rectangle)
+    while (W==0):
+        cv2.imshow('image', im)
+        if cv2.waitKey(20) & 0xFF == 27:
+            break
+    cv2.destroyAllWindows()
+    init_rbox = [ix, iy, W, H]
+    [cx, cy, w, h] = [ix+W/2,iy+H/2,W,H]
+    # tracker init
+    target_pos, target_sz = np.array([cx, cy]), np.array([w, h])
+    state = SiamRPN_init(im, target_pos, target_sz, net, args.model)
+    # tracking and visualization
+    while (cap.isOpened()):
+        toc = 0
+        success, im = cap.read()
+        tic = cv2.getTickCount()
+        state = SiamRPN_track(state, im)  # track
+        toc += cv2.getTickCount()-tic
+        res = cxy_wh_2_rect(state['target_pos'], state['target_sz'])
+        res = [int(l) for l in res]
+        cv2.rectangle(im, (res[0], res[1]), (res[0] + res[2], res[1] + res[3]), (0, 255, 255), 3)
+        cv2.imshow('SiamRPN', im)
+        cv2.waitKey(1)
+        print('Tracking Speed {:.1f}fps'.format(1/(toc/cv2.getTickFrequency())))#计算帧率
